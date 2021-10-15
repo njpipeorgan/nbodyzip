@@ -16,11 +16,15 @@
 //
 
 #include <cmath>
+#include <cstring>
 #include <cstdio>
 #include <array>
 #include <random>
 #include <tuple>
 #include <vector>
+
+#include <fcntl.h>
+#include <unistd.h>
 
 void _swap_bytes_2(uint8_t* data) {
     std::swap(data[0], data[1]);
@@ -153,21 +157,21 @@ struct posvel_data_t {
     std::vector<std::array<uint32_t, 3>> pos_data{};
     std::vector<std::array<float, 3>> vel_data{};
 
-    void read(FILE* str) {
+    void read(int str) {
         fprintf(stderr, "info: reading POSVEL file...\n");
-        std::fread(this, 8u, 4u, str);
+        ::read(str, this, 32u);
         pos_data.resize(num_particles);
         vel_data.resize(num_particles);
-        std::fread(pos_data.data(), sizeof(pos_data[0]), num_particles, str);
-        std::fread(vel_data.data(), sizeof(vel_data[0]), num_particles, str);
+        ::read(str, pos_data.data(), sizeof(pos_data[0]) * num_particles);
+        ::read(str, vel_data.data(), sizeof(vel_data[0]) * num_particles);
         fprintf(stderr, "info: time = %g, N = %d, mass = %g, eps = %g\n", time, int(num_particles), mass, eps);
     }
 
-    void write(FILE* str) const {
+    void write(int str) const {
         fprintf(stderr, "info: writing POSVEL file...\n");
-        std::fwrite(this, 8u, 4u, str);
-        std::fwrite(pos_data.data(), sizeof(pos_data[0]), num_particles, str);
-        std::fwrite(vel_data.data(), sizeof(vel_data[0]), num_particles, str);
+        ::write(str, this, 8u * 4u);
+        ::write(str, pos_data.data(), sizeof(pos_data[0]) * num_particles);
+        ::write(str, vel_data.data(), sizeof(vel_data[0]) * num_particles);
     }
 };
 
@@ -187,15 +191,9 @@ struct zip_data_t {
     static constexpr double ARCTAN_FACTOR = 1.571;
     static constexpr double VEL_ENCODE_FACTOR = 32768.0;
 
-    void read(FILE* str) {
+    void read(int str) {
         fprintf(stderr, "info: reading ZIP file...\n");
-        std::fread(&time, 8u, 1u, str);
-        std::fread(&num_particles, 8u, 1u, str);
-        std::fread(&mass, 8u, 1u, str);
-        std::fread(&eps, 8u, 1u, str);
-        std::fread(&vel_scale, 8u, 1u, str);
-        std::fread(&num_bins, 8u, 1u, str);
-        std::fread(&zip_counts_size, 8u, 1u, str);
+        ::read(str, this, 8u * 7u);
 
         if (num_bins * num_bins * num_bins != num_particles) {
             fprintf(stderr, "error: the number of particles does not match the number of bins.\n");
@@ -205,9 +203,9 @@ struct zip_data_t {
         zip_counts.resize(zip_counts_size / sizeof(zip_counts[0]) + 1);
         pos_data.resize(num_particles);
         vel_data.resize(num_particles);
-        std::fread(zip_counts.data(), 1u, zip_counts_size, str);
-        std::fread(pos_data.data(), sizeof(pos_data[0]), num_particles, str);
-        std::fread(vel_data.data(), sizeof(vel_data[0]), num_particles, str);
+        ::read(str, zip_counts.data(), zip_counts_size);
+        ::read(str, pos_data.data(), sizeof(pos_data[0]) * num_particles);
+        ::read(str, vel_data.data(), sizeof(vel_data[0]) * num_particles);
 
         // decompress counts
         // 0         : 0
@@ -245,14 +243,9 @@ struct zip_data_t {
         }
     }
 
-    void write(FILE* str) {
+    void write(int str) {
         fprintf(stderr, "info: writing ZIP file...\n");
-        std::fwrite(&time, 8u, 1u, str);
-        std::fwrite(&num_particles, 8u, 1u, str);
-        std::fwrite(&mass, 8u, 1u, str);
-        std::fwrite(&eps, 8u, 1u, str);
-        std::fwrite(&vel_scale, 8u, 1u, str);
-        std::fwrite(&num_bins, 8u, 1u, str);
+        ::write(str, this, 8u * 6u);
 
         // compress counts
         zip_counts.clear();
@@ -287,10 +280,10 @@ struct zip_data_t {
         fprintf(stderr, "info: compress count, n_bytes = %g, bits/particle = %g\n",
             double(zip_counts_size), double(zip_counts_size * 8.0 / num_particles));
 
-        std::fwrite(&zip_counts_size, 8u, 1u, str);
-        std::fwrite(zip_counts.data(), 1u, zip_counts_size, str);
-        std::fwrite(pos_data.data(), sizeof(pos_data[0]), num_particles, str);
-        std::fwrite(vel_data.data(), sizeof(vel_data[0]), num_particles, str);
+        ::write(str, &zip_counts_size, 8u);
+        ::write(str, zip_counts.data(), zip_counts_size);
+        ::write(str, pos_data.data(), sizeof(pos_data[0]) * num_particles);
+        ::write(str, vel_data.data(), sizeof(vel_data[0]) * num_particles);
     }
 
     void level_check(uint64_t level) const {
@@ -425,15 +418,15 @@ struct tipsy_data_t {
         swap_bytes(&p.phi);
     }
 
-    void read(FILE* str) {
+    void read(int str) {
         fprintf(stderr, "info: reading TIPSY file...\n");
-        std::fread(&time, 8u, 1u, str);
-        std::fread(&num_particles, 4u, 1u, str);
-        std::fseek(str, 20, SEEK_CUR);
+        ::read(str, &time, 8u);
+        ::read(str, &num_particles, 4u);
+        ::lseek(str, 20, SEEK_CUR);
         swap_bytes(&time);
         swap_bytes(&num_particles);
         particles.resize(num_particles);
-        std::fread(particles.data(), sizeof(particle_t), num_particles, str);
+        ::read(str, particles.data(), sizeof(particle_t) * num_particles);
         for (auto& p : particles) {
             swap_particle_bytes(p);
         }
@@ -441,7 +434,7 @@ struct tipsy_data_t {
             time, int(num_particles), particles.at(0).mass, particles.at(0).eps);
     }
 
-    void write(FILE* str) const {
+    void write(int str) const {
         fprintf(stderr, "info: writing TIPSY file...\n");
         auto xdr_time = this->time;
         auto xdr_num_particles = this->num_particles;
@@ -450,13 +443,13 @@ struct tipsy_data_t {
         swap_bytes(&xdr_time);
         swap_bytes(&xdr_num_particles);
         swap_bytes(&xdr_num_dimensions);
-        std::fwrite(&xdr_time, 8u, 1u, str);
-        std::fwrite(&xdr_num_particles, 4u, 1u, str);
-        std::fwrite(&xdr_num_dimensions, 4u, 1u, str);
-        std::fwrite(&padding, 4u, 1u, str);
-        std::fwrite(&xdr_num_particles, 4u, 1u, str);
-        std::fwrite(&padding, 4u, 1u, str);
-        std::fwrite(&padding, 4u, 1u, str);
+        ::write(str, &xdr_time, 8u);
+        ::write(str, &xdr_num_particles, 4u);
+        ::write(str, &xdr_num_dimensions, 4u);
+        ::write(str, &padding, 4u);
+        ::write(str, &xdr_num_particles, 4u);
+        ::write(str, &padding, 4u);
+        ::write(str, &padding, 4u);
 
         constexpr auto block_size = size_t(100);
         auto xdr_particles = std::vector<particle_t>(block_size);
@@ -467,7 +460,7 @@ struct tipsy_data_t {
             for (auto& p : xdr_particles) {
                 swap_particle_bytes(p);
             }
-            std::fwrite(xdr_particles.data(), sizeof(particle_t), end - begin, str);
+            ::write(str, xdr_particles.data(), sizeof(particle_t) * (end - begin));
             begin = end;
         }
     }
@@ -561,28 +554,25 @@ input/output format can be:
         return 0;
     }
 
-    auto input_stream = std::fopen(input_filename.c_str(), "rb");
-    if (!input_stream) {
+    auto input_stream = open(input_filename.c_str(), O_RDONLY);
+    if (input_stream < 0) {
         fprintf(stderr, "error: failed to open file, %s\n", input_filename.c_str());
         return 1;
     }
     {
-        auto output_stream = std::fopen(output_filename.c_str(), "rb");
-        if (output_stream) {
+        auto output_stream = open(output_filename.c_str(), O_RDONLY);
+        if (output_stream >= 0) {
             fprintf(stderr, "warning: output file already exists, %s\n", output_filename.c_str());
             output_filename += "." + random_id();
             fprintf(stderr, "         writing to a new file, %s\n", output_filename.c_str());
+            close(output_stream);
         }
     }
-    auto output_stream = std::fopen(output_filename.c_str(), "wb");
-    if (!output_stream) {
+    auto output_stream = open(output_filename.c_str(), O_WRONLY | O_CREAT);
+    if (output_stream < 0) {
         fprintf(stderr, "error: failed to open file %s\n", output_filename.c_str());
         return 1;
     }
-
-    // disable buffering
-    std::setvbuf(input_stream, nullptr, _IONBF, 0);
-    std::setvbuf(output_stream, nullptr, _IONBF, 0);
 
     auto posvel_buffer = posvel_data_t{};
     auto tipsy_buffer = tipsy_data_t{};
@@ -595,14 +585,12 @@ input/output format can be:
     } else if (input_format == format_t::ZIP) {
         zip_buffer.read(input_stream);
     }
-    if (std::feof(input_stream)) {
+    if (errno) {
         fprintf(stderr, "error: failed to read the input file.\n");
+        fprintf(stderr, "%s\n", std::strerror(errno));
         return 1;
     }
-    if (std::fseek(input_stream, 1, SEEK_CUR)) {
-        fprintf(stderr, "warning: the end of the file is not reached at the end of reading.\n");
-    }
-    std::fclose(input_stream);
+    ::close(input_stream);
 
     if (input_format == format_t::TIPSY) {
         tipsy_buffer.to_posvel(posvel_buffer);
@@ -623,11 +611,12 @@ input/output format can be:
         posvel_buffer = posvel_data_t{};
         zip_buffer.write(output_stream);
     }
-    if (std::ferror(output_stream)) {
+    if (errno) {
         fprintf(stderr, "error: failed to write the file.\n");
+        fprintf(stderr, "%s\n", std::strerror(errno));
         return 1;
     }
-    std::fclose(output_stream);
+    ::close(output_stream);
 
     return 0;
 }
