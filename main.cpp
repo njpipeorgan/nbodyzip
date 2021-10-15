@@ -580,6 +580,10 @@ input/output format can be:
         return 1;
     }
 
+    // disable buffering
+    std::setvbuf(input_stream, nullptr, _IONBF, 0);
+    std::setvbuf(output_stream, nullptr, _IONBF, 0);
+
     auto posvel_buffer = posvel_data_t{};
     auto tipsy_buffer = tipsy_data_t{};
     auto zip_buffer = zip_data_t{};
@@ -602,17 +606,21 @@ input/output format can be:
 
     if (input_format == format_t::TIPSY) {
         tipsy_buffer.to_posvel(posvel_buffer);
+        tipsy_buffer = tipsy_data_t{};
     } else if (input_format == format_t::ZIP) {
         zip_buffer.to_posvel(posvel_buffer);
+        zip_buffer = zip_data_t{};
     }
 
     if (output_format == format_t::TIPSY) {
         tipsy_buffer.from_posvel(posvel_buffer);
+        posvel_buffer = posvel_data_t{};
         tipsy_buffer.write(output_stream);
     } else if (output_format == format_t::POSVEL) {
         posvel_buffer.write(output_stream);
     } else if (output_format == format_t::ZIP) {
         zip_buffer.from_posvel(posvel_buffer);
+        posvel_buffer = posvel_data_t{};
         zip_buffer.write(output_stream);
     }
     if (std::ferror(output_stream)) {
