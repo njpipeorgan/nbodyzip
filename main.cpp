@@ -340,8 +340,8 @@ struct zip_data_t {
                 p_pos[1] = (bin_y << (32u - level)) | (code_y << (32u - 11u - level)) | (delta >> 1u);
                 p_pos[2] = (bin_z << (32u - level)) | (code_z << (32u - 10u - level)) | (delta);
                 for (int iv = 0; iv < 3; ++iv) {
-                    p_vel[iv] = float(vel_scale / ARCTAN_FACTOR) *
-                        std::tan(vel_data[i][iv] / float(VEL_ENCODE_FACTOR / ARCTAN_FACTOR));
+                    p_vel[iv] = (vel_scale / ARCTAN_FACTOR) *
+                        std::tan(vel_data[i][iv] / (VEL_ENCODE_FACTOR / ARCTAN_FACTOR));
                 }
             }
         }
